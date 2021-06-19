@@ -1,0 +1,7 @@
+db/
+index/
+log/
+.idea
+
+bookmarks.json
+.DS_Store
