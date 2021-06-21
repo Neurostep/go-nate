@@ -1,7 +1,7 @@
 db/
 index/
 log/
+tmp/
 .idea
 
-bookmarks.json
 .DS_Store
