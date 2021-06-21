@@ -58,19 +58,6 @@ func main() {
 	dumpFlagSet.IntVar(&dumpConcurrency, "c", 100, "Number of concurrent workers to dump the bookmarks")
 	dumpFlagSet.BoolVar(&forceDump, "F", false, "If provided, then bookmark will be dumped even if it already exists")
 
-	l, err := logger.New("dump", logPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	bm, err := bookmarks_manager.NewManager(bookmarks_manager.Props{
-		FilePath: bookmarksFile,
-		Db:       db,
-		Logger:   l,
-	})
-	if err != nil {
-		log.Fatalf("fatal: couldn't initialize bookamrks manager %s", err)
-	}
-
 	uaStream, err := user_agents.NewRandomStream()
 	if err != nil {
 		log.Fatalf("fatal: couldn't initialize ua reader %s", err)
@@ -89,6 +76,15 @@ func main() {
 		FlagSet:    dumpFlagSet,
 		Exec: func(ctx context.Context, args []string) error {
 			l, err := logger.New("dump", logPath)
+			if err != nil {
+				return err
+			}
+
+			bm, err := bookmarks_manager.NewManager(bookmarks_manager.Props{
+				FilePath: bookmarksFile,
+				Db:       db,
+				Logger:   l,
+			})
 			if err != nil {
 				return err
 			}
