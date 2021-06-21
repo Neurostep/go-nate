@@ -1,10 +1,11 @@
 package user_agents
 
 import (
+	"embed"
 	"encoding/csv"
 	"io"
+	"io/fs"
 	"math/rand"
-	"os"
 	"sync"
 	"time"
 )
@@ -12,15 +13,18 @@ import (
 type (
 	RandomStream struct {
 		mu   sync.Mutex
-		fh   *os.File
+		fh   fs.File
 		rd   *csv.Reader
 		ln   int
 		pick string
 	}
 )
 
-func NewRandomStream(path string) (*RandomStream, error) {
-	fh, err := os.OpenFile(path, os.O_RDONLY, 0644)
+//go:embed user-agents.csv
+var uaFile embed.FS
+
+func NewRandomStream() (*RandomStream, error) {
+	fh, err := uaFile.Open("user-agents.csv")
 	if err != nil {
 		return nil, err
 	}

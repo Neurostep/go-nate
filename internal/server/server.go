@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"github.com/blevesearch/bleve/v2"
 	bleveHttp "github.com/blevesearch/bleve/v2/http"
@@ -24,6 +25,9 @@ type (
 		i bleve.Index
 	}
 )
+
+//go:embed static
+var serverStaticFiles embed.FS
 
 func New(props Props) *server {
 	s := &server{
@@ -91,9 +95,11 @@ func staticFileRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.StrictSlash(true)
 
+	var static = http.FS(serverStaticFiles)
+
 	// static
-	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/",
-		myFileHandler{http.FileServer(http.Dir("./static"))}))
+	r.PathPrefix("/static/").Handler(http.StripPrefix("/",
+		myFileHandler{http.FileServer(static)}))
 
 	// application pages
 	appPages := []string{
@@ -102,8 +108,8 @@ func staticFileRouter() *mux.Router {
 
 	for _, p := range appPages {
 		// if you try to use index.html it will redirect...poorly
-		r.PathPrefix(p).Handler(RewriteURL("/",
-			http.FileServer(http.Dir("./static"))))
+		r.PathPrefix(p).Handler(RewriteURL("/static/",
+			http.FileServer(static)))
 	}
 
 	r.Handle("/", http.RedirectHandler("/static/index.html", 302))

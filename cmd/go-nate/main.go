@@ -71,7 +71,7 @@ func main() {
 		log.Fatalf("fatal: couldn't initialize bookamrks manager %s", err)
 	}
 
-	uaStream, err := user_agents.NewRandomStream(uaPath)
+	uaStream, err := user_agents.NewRandomStream()
 	if err != nil {
 		log.Fatalf("fatal: couldn't initialize ua reader %s", err)
 	}
