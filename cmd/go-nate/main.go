@@ -17,7 +17,9 @@ import (
 	"os/signal"
 	"strings"
 	"text/tabwriter"
+	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/peterbourgon/ff/v3/ffcli"
 
 	"github.com/konoui/alfred-bookmarks/pkg/bookmarker"
@@ -44,6 +46,7 @@ func main() {
 		rootFlagSet   = flag.NewFlagSet("go-nate", flag.ExitOnError)
 		dumpFlagSet   = flag.NewFlagSet("dump", flag.ExitOnError)
 		indexFlagSet  = flag.NewFlagSet("index", flag.ExitOnError)
+		watchFlagSet = flag.NewFlagSet("watch", flag.ExitOnError)
 		serverFlagSet = flag.NewFlagSet("server", flag.ExitOnError)
 	)
 
@@ -234,6 +237,160 @@ func main() {
 		},
 	}
 
+	var watchInterval time.Duration
+	var watchBookmarksPath, watchBrowser, watchBrowserProfile string
+	watchFlagSet.DurationVar(&watchInterval, "i", time.Second * 30, "The interval in which watch will perform the bookmark file check")
+	watchFlagSet.StringVar(&watchBookmarksPath, "f", _chromeDataPath, "The path to local browser profile")
+	watchFlagSet.StringVar(&watchBrowser, "b", _chromeBrowser, "Browser for which bookmarks are being watched and dumped")
+	watchFlagSet.StringVar(&watchBrowserProfile, "p", _chromeProfileName, "The profile name of the browser")
+
+	w := &ffcli.Command{
+		Name: "watch",
+		ShortUsage: "go-nate watch [-i interval] [-f path] [-b browser] [-p profile]",
+		ShortHelp: "Runs a background check for the bookmark file change",
+		FlagSet: watchFlagSet,
+		Exec: func(ctx context.Context, args []string) error {
+			dumpLogger, err := logger.New("dump", logPath)
+			if err != nil {
+				return err
+			}
+
+			indexLogger, err := logger.New("index", logPath)
+			if err != nil {
+				return err
+			}
+
+			watchLogger, err := logger.New("watch", logPath)
+			if err != nil {
+				return err
+			}
+
+			watcher, err := fsnotify.NewWatcher()
+			if err != nil {
+				return err
+			}
+			defer func() {
+				err := watcher.Close()
+				watchLogger.Error(err)
+			}()
+
+			manager, err := initBookmarkManager(&watchBrowser, &watchBookmarksPath, &watchBrowserProfile)
+			if err != nil {
+				return err
+			}
+
+			httpL := dl.NewHttpLoader()
+			chromeL := dl.NewChromeLoader()
+			defer chromeL.Stop()
+
+			d, err := dump.NewDump(&dump.Props{
+				Bm:              manager,
+				Logger:          dumpLogger,
+				PoolSize:        dumpConcurrency,
+				UserAgentStream: uaStream,
+				HttpLoader:      httpL,
+				ChromeLoader:    chromeL,
+				Db: db,
+			})
+			if err != nil {
+				return err
+			}
+
+			bmIndex, err := bleve.Open(indexPath)
+			defer func() {
+				err := bmIndex.Close()
+				if err != nil {
+					indexLogger.Error(err)
+				}
+			}()
+
+			id := indexer.New(bmIndex, db, indexLogger)
+
+			errs := make(chan error)
+			done := make(chan bool)
+			defer func() {
+				close(errs)
+				close(done)
+			}()
+
+			go func() {
+				tick := time.Tick(watchInterval)
+				var evs int
+			Loop:
+				for {
+					select {
+					case ev, ok := <-watcher.Events:
+						if !ok {
+							done <- true
+						}
+						if ev.Op&fsnotify.Write == fsnotify.Write || ev.Op&fsnotify.Create == fsnotify.Create {
+							evs++
+						}
+					case err, ok := <-watcher.Errors:
+						if !ok {
+							done <- true
+						}
+						if err != nil {
+							watchLogger.Error(err)
+						}
+					case <-tick:
+						if evs == 0 {
+							continue
+						}
+						evs = 0
+						err := d.Run(ctx, false)
+						if err != nil {
+							errs <- err
+							break Loop
+						}
+
+						err = id.IndexBookmarks()
+						if err != nil {
+							errs <- err
+							break Loop
+						}
+
+					case <-ctx.Done():
+						done <- true
+						break Loop
+					}
+				}
+			}()
+
+			var bmFile string
+			switch watchBrowser {
+			case _chromeBrowser:
+				bmFile, err = bookmarker.GetChromeBookmarkFile(watchBookmarksPath, watchBrowserProfile)
+				if err != nil {
+					return err
+				}
+			case _firefoxBrowser:
+				bmFile, err = bookmarker.GetFirefoxBookmarkFile(watchBookmarksPath, watchBrowserProfile)
+				if err != nil {
+					return err
+				}
+			case _safariBrowser:
+				bmFile, err = bookmarker.GetSafariBookmarkFile()
+				if err != nil {
+					return err
+				}
+			}
+
+			err = watcher.Add(bmFile)
+			if err != nil {
+				return err
+			}
+
+			select {
+			case err := <-errs:
+				return err
+			case <-done:
+			}
+
+			return nil
+		},
+	}
+
 	var serverPort int
 	serverFlagSet.IntVar(&serverPort, "p", 8080, "Number represents the port server will listen to")
 	s := &ffcli.Command{
@@ -271,7 +428,7 @@ func main() {
 
 	root := &ffcli.Command{
 		ShortUsage:  "go-nate [flags] <command> [<args>]",
-		Subcommands: []*ffcli.Command{d, i, s},
+		Subcommands: []*ffcli.Command{d, i, w, s},
 		FlagSet:     rootFlagSet,
 		UsageFunc:   DefaultUsageFunc,
 		Exec: func(ctx context.Context, args []string) error {

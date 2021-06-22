@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/Neurostep/go-nate/internal/dl"
 	"github.com/Neurostep/go-nate/internal/indexer"
 	"github.com/Neurostep/go-nate/internal/pool"
