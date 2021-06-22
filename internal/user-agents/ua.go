@@ -1,4 +1,4 @@
-package user_agents
+package useragents
 
 import (
 	"embed"

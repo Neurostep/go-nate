@@ -4,13 +4,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	bookmarks_manager "github.com/Neurostep/go-nate/internal/bookmarks-manager"
 	"github.com/Neurostep/go-nate/internal/dl"
 	"github.com/Neurostep/go-nate/internal/dump"
 	"github.com/Neurostep/go-nate/internal/indexer"
 	"github.com/Neurostep/go-nate/internal/logger"
 	"github.com/Neurostep/go-nate/internal/server"
-	user_agents "github.com/Neurostep/go-nate/internal/user-agents"
+	ua "github.com/Neurostep/go-nate/internal/user-agents"
 	"github.com/blevesearch/bleve/v2"
 	"github.com/dgraph-io/badger/v3"
 	"log"
@@ -20,11 +19,27 @@ import (
 	"text/tabwriter"
 
 	"github.com/peterbourgon/ff/v3/ffcli"
+
+	"github.com/konoui/alfred-bookmarks/pkg/bookmarker"
+)
+
+var (
+	_firefoxProfileName = "default"
+	_chromeProfileName  = "default"
+
+	_chromeDataPath = os.ExpandEnv("${HOME}/Library/Application Support/Google/Chrome")
+	_firefoxDataPath = os.ExpandEnv("${HOME}/Library/Application Support/Firefox/Profiles")
+)
+
+const (
+	_chromeBrowser = "chrome"
+	_safariBrowser = "safari"
+	_firefoxBrowser = "firefox"
 )
 
 func main() {
 	var (
-		logPath, dbPath, indexPath, uaPath string
+		logPath, dbPath, indexPath string
 
 		rootFlagSet   = flag.NewFlagSet("go-nate", flag.ExitOnError)
 		dumpFlagSet   = flag.NewFlagSet("dump", flag.ExitOnError)
@@ -35,7 +50,6 @@ func main() {
 	rootFlagSet.StringVar(&logPath, "l", "./log", "Path to directory containing logs")
 	rootFlagSet.StringVar(&dbPath, "s", "./db", "Path to directory containing database files")
 	rootFlagSet.StringVar(&indexPath, "i", "./index", "Path to directory containing search index")
-	rootFlagSet.StringVar(&uaPath, "u", "./user-agents.csv", "Path to file with user agents in csv format")
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -51,14 +65,47 @@ func main() {
 		}
 	}()
 
-	var bookmarksFile string
+	initBookmarkManager := func(browser, path, profile *string) (bookmarker.Bookmarker, error) {
+		var opt bookmarker.Option
+		switch *browser {
+		case _chromeBrowser:
+			if *path == "" {
+				*path = _chromeDataPath
+			}
+			if *profile == "" {
+				*profile = _chromeProfileName
+			}
+			opt = bookmarker.OptionChrome(*path, *profile)
+		case _firefoxBrowser:
+			if *path == "" {
+				*path = _firefoxDataPath
+			}
+			if *profile == "" {
+				*profile = _firefoxProfileName
+			}
+			opt = bookmarker.OptionFirefox(*path, *profile)
+		case _safariBrowser:
+			opt = bookmarker.OptionSafari()
+		}
+
+		manager, err := bookmarker.New(opt)
+		if err != nil {
+			return nil, err
+		}
+
+		return manager, nil
+	}
+
+	var dumpBookmarksPath, dumpBrowser, dumpBrowserProfile string
 	var dumpConcurrency int
 	var forceDump bool
-	dumpFlagSet.StringVar(&bookmarksFile, "f", "bookmarks.json", "The path to local JSON file containing the bookmarks")
+	dumpFlagSet.StringVar(&dumpBookmarksPath, "f", _chromeDataPath, "The path to local browser profile")
+	dumpFlagSet.StringVar(&dumpBrowser, "b", _chromeBrowser, "Browser for which bookmarks are being dumped")
+	dumpFlagSet.StringVar(&dumpBrowserProfile, "p", _chromeProfileName, "The profile name of the browser")
 	dumpFlagSet.IntVar(&dumpConcurrency, "c", 100, "Number of concurrent workers to dump the bookmarks")
 	dumpFlagSet.BoolVar(&forceDump, "F", false, "If provided, then bookmark will be dumped even if it already exists")
 
-	uaStream, err := user_agents.NewRandomStream()
+	uaStream, err := ua.NewRandomStream()
 	if err != nil {
 		log.Fatalf("fatal: couldn't initialize ua reader %s", err)
 	}
@@ -71,8 +118,8 @@ func main() {
 
 	d := &ffcli.Command{
 		Name:       "dump",
-		ShortUsage: "go-nate dump [-f path] [-c concurrency] [-F force to dump] [bookmark url] [bookmark folder] [bookmark title]",
-		ShortHelp:  "Saves bookmarks from the specified JSON file to the local DB. If bookmark URL is provided, it will dump that one only",
+		ShortUsage: "go-nate dump [-f path] [-b browser] [-p profile] [-c concurrency] [-F force to dump] [bookmark url] [bookmark folder] [bookmark title]",
+		ShortHelp:  "Saves bookmarks for the specified browser to the local DB. If bookmark URL is provided, it will dump that one only",
 		FlagSet:    dumpFlagSet,
 		Exec: func(ctx context.Context, args []string) error {
 			l, err := logger.New("dump", logPath)
@@ -80,11 +127,7 @@ func main() {
 				return err
 			}
 
-			bm, err := bookmarks_manager.NewManager(bookmarks_manager.Props{
-				FilePath: bookmarksFile,
-				Db:       db,
-				Logger:   l,
-			})
+			manager, err := initBookmarkManager(&dumpBrowser, &dumpBookmarksPath, &dumpBrowserProfile)
 			if err != nil {
 				return err
 			}
@@ -94,12 +137,13 @@ func main() {
 			defer chromeL.Stop()
 
 			d, err := dump.NewDump(&dump.Props{
-				Bm:              bm,
+				Bm:              manager,
 				Logger:          l,
 				PoolSize:        dumpConcurrency,
 				UserAgentStream: uaStream,
 				HttpLoader:      httpL,
 				ChromeLoader:    chromeL,
+				Db: db,
 			})
 			if err != nil {
 				return err
@@ -191,7 +235,7 @@ func main() {
 	}
 
 	var serverPort int
-	dumpFlagSet.IntVar(&serverPort, "p", 8080, "Number represents the port server will listen to")
+	serverFlagSet.IntVar(&serverPort, "p", 8080, "Number represents the port server will listen to")
 	s := &ffcli.Command{
 		Name:       "server",
 		ShortUsage: "go-nate server [-p port]",
@@ -242,7 +286,7 @@ func main() {
 
 	err = root.Run(ctx)
 	if err != nil {
-		log.Fatalf("fatal: run has failed %s", err)
+		log.Fatalf("fatal: go-nate has failed %s", err)
 	}
 
 	select {

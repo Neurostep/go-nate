@@ -2,14 +2,16 @@ package dump
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	bookmarks_manager "github.com/Neurostep/go-nate/internal/bookmarks-manager"
 	"github.com/Neurostep/go-nate/internal/dl"
 	"github.com/Neurostep/go-nate/internal/indexer"
 	"github.com/Neurostep/go-nate/internal/pool"
-	user_agents "github.com/Neurostep/go-nate/internal/user-agents"
+	ua "github.com/Neurostep/go-nate/internal/user-agents"
 	rw "github.com/Neurostep/readability-wrapper-go/readabilitywrapper"
 	"github.com/aws/jsii-runtime-go"
+	"github.com/dgraph-io/badger/v3"
+	"github.com/konoui/alfred-bookmarks/pkg/bookmarker"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"net/http"
@@ -32,8 +34,9 @@ type (
 		PoolSize        int
 		HttpLoader      *dl.HttpInstance
 		ChromeLoader    *dl.ChromeInstance
-		Bm              *bookmarks_manager.Manager
-		UserAgentStream *user_agents.RandomStream
+		Bm              bookmarker.Bookmarker
+		UserAgentStream *ua.RandomStream
+		Db *badger.DB
 	}
 
 	Dump struct {
@@ -41,10 +44,11 @@ type (
 		p       *pool.Pool
 		l       *zap.SugaredLogger
 		r       rw.ReadabilityWrapper
-		bm      *bookmarks_manager.Manager
+		bm      bookmarker.Bookmarker
+		db *badger.DB
 		httpL   *dl.HttpInstance
 		chromeL *dl.ChromeInstance
-		ua      *user_agents.RandomStream
+		ua      *ua.RandomStream
 	}
 
 	DumpRequest struct {
@@ -68,6 +72,7 @@ func NewDump(props *Props) (*Dump, error) {
 		ua:      props.UserAgentStream,
 		l:       props.Logger,
 		bm:      props.Bm,
+		db: props.Db,
 		httpL:   props.HttpLoader,
 		chromeL: props.ChromeLoader,
 		r:       rw.NewReadabilityWrapper(&rw.ReadabilityProps{Name: jsii.String("a")}),
@@ -85,19 +90,29 @@ func (d *Dump) Run(ctx context.Context, force bool) error {
 	var wg sync.WaitGroup
 	var hostBuckets = map[string]ratelimit.Limiter{}
 
-	r, err := d.bm.ReadAll()
+	r, err := d.bm.Bookmarks()
 	if err != nil {
 		return err
 	}
 
-	pBar := pb.StartNew(r.Total)
+	pBar := pb.StartNew(len(r))
 
-	for _, b := range r.Items {
+	for _, b := range r {
+		bookmarkExist, err := d.Exists(b.URI)
+		if err != nil {
+			return err
+		}
+
+		if !force && bookmarkExist {
+			pBar.Increment()
+			continue
+		}
+
 		wg.Add(1)
 
-		parsedUrl, err := url.Parse(b.Href)
+		parsedUrl, err := url.Parse(b.URI)
 		if err != nil {
-			d.l.Errorf("couldn't parse URL: %s", b.Href)
+			d.l.Errorf("couldn't parse URL: %s", b.URI)
 			return err
 		}
 
@@ -107,21 +122,21 @@ func (d *Dump) Run(ctx context.Context, force bool) error {
 		}
 		rl := hostBuckets[parsedUrl.Host]
 
-		func(b bookmarks_manager.BookmarkToSave) {
+		func(b *bookmarker.Bookmark) {
 			d.p.Schedule(func() {
 				defer func() {
 					wg.Done()
 					pBar.Increment()
 					if x := recover(); x != nil {
-						d.l.Errorf("run time panic: %v. HREF: %s", x, b.Href)
+						d.l.Errorf("run time panic: %v. HREF: %s", x, b.URI)
 					}
 				}()
 
 				rl.Take()
 
 				err := d.DumpBookmark(ctx, DumpRequest{
-					Href:          b.Href,
-					Folder:        b.Path,
+					Href:          b.URI,
+					Folder:        b.Folder,
 					OriginalTitle: b.Title,
 					Force:         force,
 				})
@@ -139,7 +154,7 @@ func (d *Dump) Run(ctx context.Context, force bool) error {
 }
 
 func (d *Dump) DumpBookmark(ctx context.Context, req DumpRequest) error {
-	bookmarkExist, err := d.bm.Exists(req.Href)
+	bookmarkExist, err := d.Exists(req.Href)
 	if err != nil {
 		return err
 	}
@@ -258,7 +273,34 @@ func (d *Dump) DumpBookmark(ctx context.Context, req DumpRequest) error {
 		"folder":                        req.Folder,
 	}
 
-	err = d.bm.Save(bmJson)
+	err = d.Save(bmJson)
 
 	return errors.Wrapf(err, "couldn't save file %s", *pr.Title)
+}
+
+func (d *Dump) Save(b map[string]string) error {
+	return d.db.Update(func(txn *badger.Txn) error {
+		bm, err := json.Marshal(&b)
+		if err != nil {
+			return err
+		}
+
+		return txn.Set([]byte(b["url"]), bm)
+	})
+}
+
+func (d *Dump) Exists(href string) (bool, error) {
+	var exists bool
+
+	err := d.db.View(func(txn *badger.Txn) error {
+		_, err := txn.Get([]byte(href))
+		if err != nil && err != badger.ErrKeyNotFound {
+			return err
+		}
+		exists = err != badger.ErrKeyNotFound
+
+		return nil
+	})
+
+	return exists, err
 }
