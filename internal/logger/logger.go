@@ -1,16 +1,31 @@
 package logger
 
 import (
-	"fmt"
 	"go.uber.org/zap"
 )
 
-func New(cmd, path string) (*zap.SugaredLogger, error) {
-	config := zap.NewProductionConfig()
-	config.OutputPaths = []string{fmt.Sprintf("%s/%s.log", path, cmd)}
+type (
+	Props struct {
+		Debug bool
+		Cmd string
+		OutputPaths []string
+	}
+
+	Logger struct {
+		*zap.SugaredLogger
+	}
+)
+
+func New(props Props) (*Logger, error) {
+	var config zap.Config
+	config = zap.NewProductionConfig()
+	if props.Debug {
+		config = zap.NewDevelopmentConfig()
+	}
+	config.OutputPaths = props.OutputPaths
 	config.DisableStacktrace = true
 	config.InitialFields = map[string]interface{}{
-		"cmd": cmd,
+		"cmd": props.Cmd,
 	}
 
 	log, err := config.Build()
@@ -18,5 +33,9 @@ func New(cmd, path string) (*zap.SugaredLogger, error) {
 		return nil, err
 	}
 
-	return log.Sugar(), nil
+	return &Logger{log.Sugar()}, nil
+}
+
+func(l *Logger) Warningf(str string, args ...interface{}) {
+	l.SugaredLogger.Warnf(str, args...)
 }

@@ -2,9 +2,9 @@ package indexer
 
 import (
 	"encoding/json"
+	"github.com/Neurostep/go-nate/internal/logger"
 	"github.com/blevesearch/bleve/v2"
 	"github.com/dgraph-io/badger/v3"
-	"go.uber.org/zap"
 	"time"
 )
 
@@ -12,7 +12,7 @@ type (
 	Indexer struct {
 		i  bleve.Index
 		db *badger.DB
-		l  *zap.SugaredLogger
+		l  *logger.Logger
 	}
 )
 
@@ -20,7 +20,7 @@ const (
 	batchSize = 100
 )
 
-func New(i bleve.Index, db *badger.DB, l *zap.SugaredLogger) *Indexer {
+func New(i bleve.Index, db *badger.DB, l *logger.Logger) *Indexer {
 	return &Indexer{
 		i:  i,
 		db: db,
@@ -113,7 +113,7 @@ func (idx *Indexer) IndexBookmarks() error {
 					indexDuration := time.Since(startTime)
 					indexDurationSeconds := float64(indexDuration) / float64(time.Second)
 					timePerDoc := float64(indexDuration) / float64(count)
-					idx.l.Debugf("Indexed %d documents, in %.2fs (average %.2fms/doc)", count, indexDurationSeconds, timePerDoc/float64(time.Millisecond))
+					idx.l.Infof("Indexed %d documents, in %.2fs (average %.2fms/doc)", count, indexDurationSeconds, timePerDoc/float64(time.Millisecond))
 				}
 				return nil
 			})
@@ -137,7 +137,7 @@ func (idx *Indexer) IndexBookmarks() error {
 	indexDuration := time.Since(startTime)
 	indexDurationSeconds := float64(indexDuration) / float64(time.Second)
 	timePerDoc := float64(indexDuration) / float64(count)
-	idx.l.Debugf("Indexed %d documents, in %.2fs (average %.2fms/doc)", count, indexDurationSeconds, timePerDoc/float64(time.Millisecond))
+	idx.l.Infof("Indexed %d documents, in %.2fs (average %.2fms/doc)", count, indexDurationSeconds, timePerDoc/float64(time.Millisecond))
 
 	return nil
 }

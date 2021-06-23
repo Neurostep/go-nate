@@ -12,7 +12,6 @@ import (
 	ua "github.com/Neurostep/go-nate/internal/user-agents"
 	"github.com/blevesearch/bleve/v2"
 	"github.com/dgraph-io/badger/v3"
-	"log"
 	"os"
 	"os/signal"
 	"strings"
@@ -41,6 +40,7 @@ const (
 
 func main() {
 	var (
+		debug bool
 		logPath, dbPath, indexPath string
 
 		rootFlagSet   = flag.NewFlagSet("go-nate", flag.ExitOnError)
@@ -50,6 +50,7 @@ func main() {
 		serverFlagSet = flag.NewFlagSet("server", flag.ExitOnError)
 	)
 
+	rootFlagSet.BoolVar(&debug, "d", false, "Turn on debug mode")
 	rootFlagSet.StringVar(&logPath, "l", "./log", "Path to directory containing logs")
 	rootFlagSet.StringVar(&dbPath, "s", "./db", "Path to directory containing database files")
 	rootFlagSet.StringVar(&indexPath, "i", "./index", "Path to directory containing search index")
@@ -57,14 +58,20 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	db, err := badger.Open(badger.DefaultOptions(dbPath))
+	rootLogger, err := logger.New(logger.Props{
+		Cmd: "root", Debug: debug, OutputPaths: []string{"stdout"},
+	})
+
+	badgerOpts := badger.DefaultOptions(dbPath)
+	badgerOpts = badgerOpts.WithLogger(rootLogger)
+	db, err := badger.Open(badgerOpts)
 	if err != nil {
-		log.Fatalf("fatal: couldn't open db %s", err)
+		rootLogger.Fatalf("fatal: couldn't open db %s", err)
 	}
 	defer func() {
 		err := db.Close()
 		if err != nil {
-			log.Printf("error: couldn't close db connection %s", err)
+			rootLogger.Errorf("error: couldn't close db connection %s", err)
 		}
 	}()
 
@@ -110,12 +117,12 @@ func main() {
 
 	uaStream, err := ua.NewRandomStream()
 	if err != nil {
-		log.Fatalf("fatal: couldn't initialize ua reader %s", err)
+		rootLogger.Fatalf("fatal: couldn't initialize ua reader %s", err)
 	}
 	defer func() {
 		err := uaStream.Close()
 		if err != nil {
-			log.Print(err)
+			rootLogger.Error(err)
 		}
 	}()
 
@@ -125,7 +132,12 @@ func main() {
 		ShortHelp:  "Saves bookmarks for the specified browser to the local DB. If bookmark URL is provided, it will dump that one only",
 		FlagSet:    dumpFlagSet,
 		Exec: func(ctx context.Context, args []string) error {
-			l, err := logger.New("dump", logPath)
+			rootLogger.Info("start dumping bookmarks...")
+			defer rootLogger.Info("dump has been finished")
+
+			l, err := logger.New(logger.Props{
+				Cmd: "dump", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s.log", logPath, "dump")},
+			})
 			if err != nil {
 				return err
 			}
@@ -187,7 +199,12 @@ func main() {
 		ShortHelp:  "Indexes bookmarks from DB. If 'bookmark url' is provided, it will index only that bookmark",
 		FlagSet:    indexFlagSet,
 		Exec: func(ctx context.Context, args []string) error {
-			l, err := logger.New("index", logPath)
+			rootLogger.Info("start indexing bookmarks...")
+			defer rootLogger.Info("index has been finished")
+
+			l, err := logger.New(logger.Props{
+				Cmd: "index", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s.log", logPath, "index")},
+			})
 			if err != nil {
 				return err
 			}
@@ -250,17 +267,45 @@ func main() {
 		ShortHelp: "Runs a background check for the bookmark file change",
 		FlagSet: watchFlagSet,
 		Exec: func(ctx context.Context, args []string) error {
-			dumpLogger, err := logger.New("dump", logPath)
+			var bmFile string
+			switch watchBrowser {
+			case _chromeBrowser:
+				bmFile, err = bookmarker.GetChromeBookmarkFile(watchBookmarksPath, watchBrowserProfile)
+				if err != nil {
+					return err
+				}
+			case _firefoxBrowser:
+				bmFile, err = bookmarker.GetFirefoxBookmarkFile(watchBookmarksPath, watchBrowserProfile)
+				if err != nil {
+					return err
+				}
+			case _safariBrowser:
+				bmFile, err = bookmarker.GetSafariBookmarkFile()
+				if err != nil {
+					return err
+				}
+			}
+
+			rootLogger.Infof("start watching %s file...", bmFile)
+			defer rootLogger.Info("watch has been finished")
+
+			dumpLogger, err := logger.New(logger.Props{
+				Cmd: "dump", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s.log", logPath, "dump")},
+			})
 			if err != nil {
 				return err
 			}
 
-			indexLogger, err := logger.New("index", logPath)
+			indexLogger, err := logger.New(logger.Props{
+				Cmd: "index", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s.log", logPath, "index")},
+			})
 			if err != nil {
 				return err
 			}
 
-			watchLogger, err := logger.New("watch", logPath)
+			watchLogger, err := logger.New(logger.Props{
+				Cmd: "watch", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s.log", logPath, "watch")},
+			})
 			if err != nil {
 				return err
 			}
@@ -357,25 +402,6 @@ func main() {
 				}
 			}()
 
-			var bmFile string
-			switch watchBrowser {
-			case _chromeBrowser:
-				bmFile, err = bookmarker.GetChromeBookmarkFile(watchBookmarksPath, watchBrowserProfile)
-				if err != nil {
-					return err
-				}
-			case _firefoxBrowser:
-				bmFile, err = bookmarker.GetFirefoxBookmarkFile(watchBookmarksPath, watchBrowserProfile)
-				if err != nil {
-					return err
-				}
-			case _safariBrowser:
-				bmFile, err = bookmarker.GetSafariBookmarkFile()
-				if err != nil {
-					return err
-				}
-			}
-
 			err = watcher.Add(bmFile)
 			if err != nil {
 				return err
@@ -399,7 +425,9 @@ func main() {
 		ShortHelp:  "Runs HTTP server on provided port",
 		FlagSet:    serverFlagSet,
 		Exec: func(ctx context.Context, args []string) error {
-			l, err := logger.New("server", logPath)
+			l, err := logger.New(logger.Props{
+				Cmd: "server", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s.log", logPath, "server")},
+			})
 			if err != nil {
 				return err
 			}
@@ -438,20 +466,20 @@ func main() {
 
 	err = root.Parse(os.Args[1:])
 	if err != nil {
-		log.Fatalf("fatal: couldn't parse CLI arguments %s", err)
+		rootLogger.Fatalf("fatal: couldn't parse CLI arguments %s", err)
 	}
 
 	err = root.Run(ctx)
 	if err != nil {
-		log.Fatalf("fatal: go-nate has failed %s", err)
+		rootLogger.Fatalf("fatal: go-nate has failed %s", err)
 	}
 
 	select {
 	case <-ctx.Done():
 		stop()
-		log.Fatalf("go-nate interrupted: %s", ctx.Err())
+		rootLogger.Fatalf("go-nate interrupted: %s", ctx.Err())
 	default:
-		log.Println("go-nate finished")
+		rootLogger.Info("go-nate finished")
 	}
 }
 

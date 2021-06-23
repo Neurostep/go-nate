@@ -4,10 +4,10 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"github.com/Neurostep/go-nate/internal/logger"
 	"github.com/blevesearch/bleve/v2"
 	bleveHttp "github.com/blevesearch/bleve/v2/http"
 	"github.com/gorilla/mux"
-	"go.uber.org/zap"
 	"net/http"
 	"time"
 )
@@ -15,13 +15,13 @@ import (
 type (
 	Props struct {
 		Port   int
-		Logger *zap.SugaredLogger
+		Logger *logger.Logger
 		Index  bleve.Index
 	}
 
 	server struct {
 		http.Server
-		l *zap.SugaredLogger
+		l *logger.Logger
 		i bleve.Index
 	}
 )

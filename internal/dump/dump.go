@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Neurostep/go-nate/internal/logger"
 
 	"github.com/Neurostep/go-nate/internal/dl"
 	"github.com/Neurostep/go-nate/internal/indexer"
@@ -14,7 +15,6 @@ import (
 	"github.com/dgraph-io/badger/v3"
 	"github.com/konoui/alfred-bookmarks/pkg/bookmarker"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 	"net/http"
 
 	"github.com/abadojack/whatlanggo"
@@ -31,7 +31,7 @@ import (
 
 type (
 	Props struct {
-		Logger          *zap.SugaredLogger
+		Logger          *logger.Logger
 		PoolSize        int
 		HttpLoader      *dl.HttpInstance
 		ChromeLoader    *dl.ChromeInstance
@@ -43,7 +43,7 @@ type (
 	Dump struct {
 		mux     sync.Mutex
 		p       *pool.Pool
-		l       *zap.SugaredLogger
+		l       *logger.Logger
 		r       rw.ReadabilityWrapper
 		bm      bookmarker.Bookmarker
 		db *badger.DB
