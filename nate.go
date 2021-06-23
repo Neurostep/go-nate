@@ -316,7 +316,9 @@ func main() {
 			}
 			defer func() {
 				err := watcher.Close()
-				watchLogger.Error(err)
+				if err != nil {
+					watchLogger.Error(err)
+				}
 			}()
 
 			manager, err := initBookmarkManager(&watchBrowser, &watchBookmarksPath, &watchBrowserProfile)
