@@ -199,27 +199,26 @@ func (d *Dump) DumpBookmark(ctx context.Context, req DumpRequest) error {
 
 			chromeResp, err := d.chromeL.Get(ctx, req.Href)
 			if err != nil {
-				return errors.Wrap(err, "got error while using chrome")
+				d.l.Error(errors.Wrap(err, "got error while using chrome"))
 			}
 
 			body, err = ioutil.ReadAll(chromeResp.Body)
 			if err != nil {
-				return errors.Wrapf(err, "couldn't read response body for HREF: %s", req.Href)
+				d.l.Error(errors.Wrapf(err, "couldn't read response body for HREF: %s", req.Href))
 			}
 		}
 
 		if body == nil {
-			return errors.Errorf("body is nil for HREF: %s. Status is %s", req.Href, r.Status)
-		}
-
-		if attempts > 1 {
-			d.l.Debugf("able to re-retrieve %s page after %d attempts", req.Href, attempts)
+			d.l.Error(errors.Errorf("body is nil for HREF: %s. Status is %s", req.Href, r.Status))
 		}
 
 		break
 	}
 
-	pr := d.Parse(string(body), req.Href)
+	var pr = &rw.ReadabilityResult{}
+	if body != nil {
+		pr = d.Parse(string(body), req.Href)
+	}
 
 	var title, html, text, excerpt, author, site string
 	if pr.Title != nil {
