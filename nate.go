@@ -361,6 +361,7 @@ func main() {
 			go func() {
 				tick := time.Tick(watchInterval)
 				var evs int
+				var inAction bool
 			Loop:
 				for {
 					select {
@@ -379,10 +380,11 @@ func main() {
 							watchLogger.Error(err)
 						}
 					case <-tick:
-						if evs == 0 {
+						if evs == 0 || inAction {
 							continue
 						}
 						evs = 0
+						inAction = true
 						err := d.Run(ctx, false)
 						if err != nil {
 							errs <- err
@@ -394,6 +396,7 @@ func main() {
 							errs <- err
 							break Loop
 						}
+						inAction = false
 
 					case <-ctx.Done():
 						done <- true
