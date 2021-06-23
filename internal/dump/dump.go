@@ -37,7 +37,7 @@ type (
 		ChromeLoader    *dl.ChromeInstance
 		Bm              bookmarker.Bookmarker
 		UserAgentStream *ua.RandomStream
-		Db *badger.DB
+		Db              *badger.DB
 	}
 
 	Dump struct {
@@ -46,7 +46,7 @@ type (
 		l       *logger.Logger
 		r       rw.ReadabilityWrapper
 		bm      bookmarker.Bookmarker
-		db *badger.DB
+		db      *badger.DB
 		httpL   *dl.HttpInstance
 		chromeL *dl.ChromeInstance
 		ua      *ua.RandomStream
@@ -73,7 +73,7 @@ func NewDump(props *Props) (*Dump, error) {
 		ua:      props.UserAgentStream,
 		l:       props.Logger,
 		bm:      props.Bm,
-		db: props.Db,
+		db:      props.Db,
 		httpL:   props.HttpLoader,
 		chromeL: props.ChromeLoader,
 		r:       rw.NewReadabilityWrapper(&rw.ReadabilityProps{Name: jsii.String("a")}),

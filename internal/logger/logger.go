@@ -6,8 +6,8 @@ import (
 
 type (
 	Props struct {
-		Debug bool
-		Cmd string
+		Debug       bool
+		Cmd         string
 		OutputPaths []string
 	}
 
@@ -36,6 +36,6 @@ func New(props Props) (*Logger, error) {
 	return &Logger{log.Sugar()}, nil
 }
 
-func(l *Logger) Warningf(str string, args ...interface{}) {
+func (l *Logger) Warningf(str string, args ...interface{}) {
 	l.SugaredLogger.Warnf(str, args...)
 }

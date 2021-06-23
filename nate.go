@@ -28,25 +28,25 @@ var (
 	_firefoxProfileName = "default"
 	_chromeProfileName  = "default"
 
-	_chromeDataPath = os.ExpandEnv("${HOME}/Library/Application Support/Google/Chrome")
+	_chromeDataPath  = os.ExpandEnv("${HOME}/Library/Application Support/Google/Chrome")
 	_firefoxDataPath = os.ExpandEnv("${HOME}/Library/Application Support/Firefox/Profiles")
 )
 
 const (
-	_chromeBrowser = "chrome"
-	_safariBrowser = "safari"
+	_chromeBrowser  = "chrome"
+	_safariBrowser  = "safari"
 	_firefoxBrowser = "firefox"
 )
 
 func main() {
 	var (
-		debug bool
+		debug                      bool
 		logPath, dbPath, indexPath string
 
 		rootFlagSet   = flag.NewFlagSet("go-nate", flag.ExitOnError)
 		dumpFlagSet   = flag.NewFlagSet("dump", flag.ExitOnError)
 		indexFlagSet  = flag.NewFlagSet("index", flag.ExitOnError)
-		watchFlagSet = flag.NewFlagSet("watch", flag.ExitOnError)
+		watchFlagSet  = flag.NewFlagSet("watch", flag.ExitOnError)
 		serverFlagSet = flag.NewFlagSet("server", flag.ExitOnError)
 	)
 
@@ -158,7 +158,7 @@ func main() {
 				UserAgentStream: uaStream,
 				HttpLoader:      httpL,
 				ChromeLoader:    chromeL,
-				Db: db,
+				Db:              db,
 			})
 			if err != nil {
 				return err
@@ -256,16 +256,16 @@ func main() {
 
 	var watchInterval time.Duration
 	var watchBookmarksPath, watchBrowser, watchBrowserProfile string
-	watchFlagSet.DurationVar(&watchInterval, "i", time.Second * 30, "The interval in which watch will perform the bookmark file check")
+	watchFlagSet.DurationVar(&watchInterval, "i", time.Second*30, "The interval in which watch will perform the bookmark file check")
 	watchFlagSet.StringVar(&watchBookmarksPath, "f", _chromeDataPath, "The path to local browser profile")
 	watchFlagSet.StringVar(&watchBrowser, "b", _chromeBrowser, "Browser for which bookmarks are being watched and dumped")
 	watchFlagSet.StringVar(&watchBrowserProfile, "p", _chromeProfileName, "The profile name of the browser")
 
 	w := &ffcli.Command{
-		Name: "watch",
+		Name:       "watch",
 		ShortUsage: "go-nate watch [-i interval] [-f path] [-b browser] [-p profile]",
-		ShortHelp: "Runs a background check for the bookmark file change",
-		FlagSet: watchFlagSet,
+		ShortHelp:  "Runs a background check for the bookmark file change",
+		FlagSet:    watchFlagSet,
 		Exec: func(ctx context.Context, args []string) error {
 			var bmFile string
 			switch watchBrowser {
@@ -335,7 +335,7 @@ func main() {
 				UserAgentStream: uaStream,
 				HttpLoader:      httpL,
 				ChromeLoader:    chromeL,
-				Db: db,
+				Db:              db,
 			})
 			if err != nil {
 				return err
