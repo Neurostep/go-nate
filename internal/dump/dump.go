@@ -202,9 +202,11 @@ func (d *Dump) DumpBookmark(ctx context.Context, req DumpRequest) error {
 				d.l.Error(errors.Wrap(err, "got error while using chrome"))
 			}
 
-			body, err = ioutil.ReadAll(chromeResp.Body)
-			if err != nil {
-				d.l.Error(errors.Wrapf(err, "couldn't read response body for HREF: %s", req.Href))
+			if chromeResp != nil && chromeResp.Body != nil {
+				body, err = ioutil.ReadAll(chromeResp.Body)
+				if err != nil {
+					d.l.Error(errors.Wrapf(err, "couldn't read response body for HREF: %s", req.Href))
+				}
 			}
 		}
 
