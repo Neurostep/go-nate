@@ -1,6 +1,12 @@
 # go-nate
 CLI tool to dump, index and search bookmarks
 
+## Why 'go-nate' name?
+
+Considering the `bookmarks` as a treasure the idea was to name the tool after the not-so-famous treasure hunter.
+Therefore, the `nate` part is coming after the [Nathan Drake](https://en.wikipedia.org/wiki/Nathan_Drake_(Uncharted)) the treasure hunter of the [Uncharted](https://en.wikipedia.org/wiki/Uncharted) video game series.
+`go` part, obviously, stands for the [main language](https://golang.org/) the CLI tool is built on.
+
 ## Motivation
 
 The idea behind this tool is to make browser's bookmarks searchable by their category, title, and content. It could be done in 3 steps: `dump`, `index` and then run a webserver with available UI to search across the bookmarks.
