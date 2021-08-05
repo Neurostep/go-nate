@@ -27,7 +27,7 @@ Run the following command:
 go install github.com/Neurostep/go-nate
 ```
 
-`go-nate` binary will be installed in `$GOPATH/bin` or `$GOBIN` if specified
+`go-nate` binary will be installed in `$GOPATH/bin`
 
 ### Docker
 
