@@ -8,12 +8,14 @@ import (
 	"github.com/Neurostep/go-nate/internal/dump"
 	"github.com/Neurostep/go-nate/internal/indexer"
 	"github.com/Neurostep/go-nate/internal/logger"
+	"github.com/Neurostep/go-nate/internal/repl"
 	"github.com/Neurostep/go-nate/internal/server"
 	ua "github.com/Neurostep/go-nate/internal/user-agents"
 	"github.com/blevesearch/bleve/v2"
 	"github.com/dgraph-io/badger/v3"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -48,12 +50,13 @@ func main() {
 		indexFlagSet  = flag.NewFlagSet("index", flag.ExitOnError)
 		watchFlagSet  = flag.NewFlagSet("watch", flag.ExitOnError)
 		serverFlagSet = flag.NewFlagSet("server", flag.ExitOnError)
+		replFlagSet   = flag.NewFlagSet("repl", flag.ExitOnError)
 	)
 
 	rootFlagSet.BoolVar(&debug, "d", false, "Turn on debug mode")
-	rootFlagSet.StringVar(&logPath, "l", "./log", "Path to directory containing logs")
-	rootFlagSet.StringVar(&dbPath, "s", "./db", "Path to directory containing database files")
-	rootFlagSet.StringVar(&indexPath, "i", "./index", "Path to directory containing search index")
+	rootFlagSet.StringVar(&logPath, "l", "log", "Path to directory containing logs")
+	rootFlagSet.StringVar(&dbPath, "s", "db", "Path to directory containing database files")
+	rootFlagSet.StringVar(&indexPath, "i", "index", "Path to directory containing search index")
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -62,7 +65,22 @@ func main() {
 		Cmd: "root", Debug: debug, OutputPaths: []string{"stdout"},
 	})
 
-	badgerOpts := badger.DefaultOptions(dbPath)
+	home, err := homeDir()
+	if err != nil {
+		rootLogger.Fatalf("fatal: couldn't initialize home dir %s", err)
+	}
+
+	err = os.MkdirAll(home, 0o755)
+	if err != nil && !os.IsExist(err) {
+		rootLogger.Fatalf("fatal: couldn't create home directory %s", err)
+	}
+
+	err = os.MkdirAll(fmt.Sprintf("%s/%s", home, logPath), 0o755)
+	if err != nil && !os.IsExist(err) {
+		rootLogger.Fatalf("fatal: couldn't create log directory %s", err)
+	}
+
+	badgerOpts := badger.DefaultOptions(fmt.Sprintf("%s/%s", home, dbPath))
 	badgerOpts = badgerOpts.WithLogger(rootLogger)
 	db, err := badger.Open(badgerOpts)
 	if err != nil {
@@ -136,7 +154,7 @@ func main() {
 			defer rootLogger.Info("dump has been finished")
 
 			l, err := logger.New(logger.Props{
-				Cmd: "dump", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s.log", logPath, "dump")},
+				Cmd: "dump", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s/%s.log", home, logPath, "dump")},
 			})
 			if err != nil {
 				return err
@@ -203,13 +221,13 @@ func main() {
 			defer rootLogger.Info("index has been finished")
 
 			l, err := logger.New(logger.Props{
-				Cmd: "index", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s.log", logPath, "index")},
+				Cmd: "index", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s/%s.log", home, logPath, "index")},
 			})
 			if err != nil {
 				return err
 			}
 
-			bmIndex, err := bleve.Open(indexPath)
+			bmIndex, err := bleve.Open(fmt.Sprintf("%s/%s", home, indexPath))
 			if err == bleve.ErrorIndexPathDoesNotExist {
 				indexMapping, err := indexer.BuildIndexMapping()
 				if err != nil {
@@ -217,7 +235,7 @@ func main() {
 					return err
 				}
 
-				bmIndex, err = bleve.New(indexPath, indexMapping)
+				bmIndex, err = bleve.New(fmt.Sprintf("%s/%s", home, indexPath), indexMapping)
 				if err != nil {
 					l.Errorf("couldn't create index %s", err)
 					return err
@@ -290,14 +308,14 @@ func main() {
 			defer rootLogger.Info("watch has been finished")
 
 			dumpLogger, err := logger.New(logger.Props{
-				Cmd: "dump", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s.log", logPath, "dump")},
+				Cmd: "dump", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s/%s.log", home, logPath, "dump")},
 			})
 			if err != nil {
 				return err
 			}
 
 			indexLogger, err := logger.New(logger.Props{
-				Cmd: "index", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s.log", logPath, "index")},
+				Cmd: "index", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s/%s.log", home, logPath, "index")},
 			})
 			if err != nil {
 				return err
@@ -343,7 +361,7 @@ func main() {
 				return err
 			}
 
-			bmIndex, err := bleve.Open(indexPath)
+			bmIndex, err := bleve.Open(fmt.Sprintf("%s/%s", home, indexPath))
 			defer func() {
 				err := bmIndex.Close()
 				if err != nil {
@@ -431,13 +449,13 @@ func main() {
 		FlagSet:    serverFlagSet,
 		Exec: func(ctx context.Context, args []string) error {
 			l, err := logger.New(logger.Props{
-				Cmd: "server", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s.log", logPath, "server")},
+				Cmd: "server", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s/%s.log", home, logPath, "server")},
 			})
 			if err != nil {
 				return err
 			}
 
-			bmIndex, err := bleve.Open(indexPath)
+			bmIndex, err := bleve.Open(fmt.Sprintf("%s/%s", home, indexPath))
 			if err != nil {
 				l.Errorf("couldn't open index %s", err)
 				return err
@@ -459,9 +477,27 @@ func main() {
 		},
 	}
 
+	r := &ffcli.Command{
+		Name:       "repl",
+		ShortUsage: "go-nate repl",
+		ShortHelp:  "Starts the go-nate REPL",
+		FlagSet:    replFlagSet,
+		Exec: func(ctx context.Context, args []string) error {
+			bmIndex, err := bleve.Open(fmt.Sprintf("%s/%s", home, indexPath))
+
+			if err != nil {
+				return err
+			}
+
+			re := repl.New(bmIndex, home)
+
+			return re.Run()
+		},
+	}
+
 	root := &ffcli.Command{
 		ShortUsage:  "go-nate [flags] <command> [<args>]",
-		Subcommands: []*ffcli.Command{d, i, w, s},
+		Subcommands: []*ffcli.Command{d, i, w, s, r},
 		FlagSet:     rootFlagSet,
 		UsageFunc:   DefaultUsageFunc,
 		Exec: func(ctx context.Context, args []string) error {
@@ -529,4 +565,19 @@ func DefaultUsageFunc(c *ffcli.Command) string {
 func countFlags(fs *flag.FlagSet) (n int) {
 	fs.VisitAll(func(*flag.Flag) { n++ })
 	return n
+}
+
+func homeDir() (home string, err error) {
+	home = os.Getenv("GONATE_HOME")
+	if home != "" {
+		return
+	}
+
+	home, err = os.UserHomeDir()
+	if err != nil {
+		return
+	}
+
+	home = filepath.Join(home, ".gonate")
+	return
 }

@@ -35,10 +35,13 @@ docker pull neurostep/go-nate:latest
 persistent and accessible from the host we need to mount local directories to docker container, for example:
 
 ```bash
-docker run -it -v "index:/root/index" -v "db:/root/db" -v "index:/root/index" -v "log:/root/log" -v "${HOME}/Library/Application Support/Google/Chrome:/root/bookmarks" go-nate:latest go-nate dump -f bookmarks
+docker run -it -v "${HOME}/.gonate/index:/root/index" -v "${HOME}/.gonate/db:/root/db" -v "${HOME}/.gonate/index:/root/index" -v "${HOME}/.gonate/log:/root/log" -v "${HOME}/Library/Application Support/Google/Chrome:/root/bookmarks" neurostep/go-nate:latest go-nate dump -f bookmarks
 ```
 
 ## Usage
+
+By default, `go-nate` stores all auxiliary data in "${HOME}/.gonate/" directory.
+This can be changed by specifying environment variable `GONATE_HOME`.
 
 ```bash
 go-nate --help
@@ -50,6 +53,7 @@ Commands:
     index     Indexes bookmarks from DB. If 'bookmark url' is provided, it will index only that bookmark
     watch     Runs a background check for the bookmark file change
     server    Runs HTTP server on provided port
+    repl      Starts the go-nate REPL
 
 Flags:
   --d  Turn on debug mode
@@ -58,6 +62,29 @@ Flags:
   --s  Path to directory containing database files
 ```
 
+### Repl
+
+```bash
+go-nate repl --help
+
+USAGE
+  go-nate repl
+```
+
+`go-nate repl` will start the very simple REPL with prompt `go-nate> `.
+REPL supports following commands:
+
+1. `search <here goes search string>` - will run the [Query Search](https://blevesearch.com/docs/Query-String-Query/)
+    against the index. Index should be present.
+2. `set search searchResultSize <number>` - specifies the number of result for search command. Default number is `10`
+
+Examples:
+
+```
+go-nate repl
+go-nate> search golang
+go-nate> set search searchResultSize 2
+```
 ### Dump
 
 ```bash

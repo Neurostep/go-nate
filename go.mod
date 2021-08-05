@@ -16,6 +16,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/konoui/alfred-bookmarks v0.4.2
 	github.com/peterbourgon/ff/v3 v3.0.0
+	github.com/peterh/liner v1.2.1
 	github.com/pkg/errors v0.9.1
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.17.0
