@@ -392,7 +392,9 @@ func main() {
 				return err
 			}
 
-			bmIndex, err := bleve.Open(fmt.Sprintf("%s/%s", home, indexPath))
+			bmIndex, err := bleve.OpenUsing(fmt.Sprintf("%s/%s", home, indexPath), map[string]interface{}{
+				"read_only": true,
+			})
 			defer func() {
 				err := bmIndex.Close()
 				if err != nil {
@@ -514,7 +516,9 @@ func main() {
 		ShortHelp:  "Starts the go-nate REPL",
 		FlagSet:    replFlagSet,
 		Exec: func(ctx context.Context, args []string) error {
-			bmIndex, err := bleve.Open(fmt.Sprintf("%s/%s", home, indexPath))
+			bmIndex, err := bleve.OpenUsing(fmt.Sprintf("%s/%s", home, indexPath), map[string]interface{}{
+				"read_only": true,
+			})
 
 			if err != nil {
 				return err
