@@ -17,4 +17,4 @@ ENV PATH /headless-shell:$PATH
 
 WORKDIR /root/
 
-RUN go install github.com/Neurostep/go-nate@v0.0.4
+RUN go install github.com/Neurostep/go-nate@v0.0.5
