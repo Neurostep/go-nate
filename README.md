@@ -35,7 +35,10 @@ docker pull neurostep/go-nate:latest
 persistent and accessible from the host we need to mount local directories to docker container, for example:
 
 ```bash
-docker run -it -v "${HOME}/.gonate/index:/root/index" -v "${HOME}/.gonate/db:/root/db" -v "${HOME}/.gonate/index:/root/index" -v "${HOME}/.gonate/log:/root/log" -v "${HOME}/Library/Application Support/Google/Chrome:/root/bookmarks" neurostep/go-nate:latest go-nate dump -f bookmarks
+docker run -it -v "${HOME}/.gonate:/root/.gonate" -v "${HOME}/Library/Application Support/Google/Chrome:/root/bookmarks" neurostep/go-nate:latest go-nate dump -f bookmarks
+docker run -it -v "${HOME}/.gonate:/root/.gonate" neurostep/go-nate:latest go-nate index
+docker run -it -v "${HOME}/.gonate:/root/.gonate" neurostep/go-nate:latest go-nate repl
+docker run -it -v "${HOME}/.gonate:/root/.gonate" neurostep/go-nate:latest go-nate server
 ```
 
 ## Usage
