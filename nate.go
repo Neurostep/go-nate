@@ -322,7 +322,7 @@ func main() {
 			}
 
 			watchLogger, err := logger.New(logger.Props{
-				Cmd: "watch", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s.log", logPath, "watch")},
+				Cmd: "watch", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s/%s.log", home, logPath, "watch")},
 			})
 			if err != nil {
 				return err
