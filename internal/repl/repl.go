@@ -90,6 +90,7 @@ func (r *Repl) Run() error {
 			r.errorf("can not process input, %s", err)
 			continue
 		}
+		rl.AppendHistory(in)
 	}
 
 	if historyFile != "" {
