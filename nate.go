@@ -80,18 +80,17 @@ func main() {
 		rootLogger.Fatalf("fatal: couldn't create log directory %s", err)
 	}
 
-	badgerOpts := badger.DefaultOptions(fmt.Sprintf("%s/%s", home, dbPath))
-	badgerOpts = badgerOpts.WithLogger(rootLogger)
-	db, err := badger.Open(badgerOpts)
-	if err != nil {
-		rootLogger.Fatalf("fatal: couldn't open db %s", err)
-	}
-	defer func() {
-		err := db.Close()
+	initBadger := func(readOnly bool) (*badger.DB, error) {
+		badgerOpts := badger.DefaultOptions(fmt.Sprintf("%s/%s", home, dbPath))
+		badgerOpts = badgerOpts.WithLogger(rootLogger)
+		badgerOpts.ReadOnly = readOnly
+		db, err := badger.Open(badgerOpts)
 		if err != nil {
-			rootLogger.Errorf("error: couldn't close db connection %s", err)
+			return nil, err
 		}
-	}()
+
+		return db, nil
+	}
 
 	initBookmarkManager := func(browser, path, profile *string) (bookmarker.Bookmarker, error) {
 		var opt bookmarker.Option
@@ -152,6 +151,17 @@ func main() {
 		Exec: func(ctx context.Context, args []string) error {
 			rootLogger.Info("start dumping bookmarks...")
 			defer rootLogger.Info("dump has been finished")
+
+			db, err := initBadger(false)
+			if err != nil {
+				return err
+			}
+			defer func() {
+				err := db.Close()
+				if err != nil {
+					rootLogger.Errorf("error: couldn't close db connection %s", err)
+				}
+			}()
 
 			l, err := logger.New(logger.Props{
 				Cmd: "dump", Debug: debug, OutputPaths: []string{fmt.Sprintf("%s/%s/%s.log", home, logPath, "dump")},
@@ -252,6 +262,16 @@ func main() {
 				}
 			}()
 
+			db, err := initBadger(true)
+			if err != nil {
+				return err
+			}
+			defer func() {
+				err := db.Close()
+				if err != nil {
+					rootLogger.Errorf("error: couldn't close db connection %s", err)
+				}
+			}()
 			id := indexer.New(bmIndex, db, l)
 
 			if len(args) == 1 {
@@ -347,6 +367,17 @@ func main() {
 			httpL := dl.NewHttpLoader()
 			chromeL := dl.NewChromeLoader()
 			defer chromeL.Stop()
+
+			db, err := initBadger(false)
+			if err != nil {
+				return err
+			}
+			defer func() {
+				err := db.Close()
+				if err != nil {
+					rootLogger.Errorf("error: couldn't close db connection %s", err)
+				}
+			}()
 
 			d, err := dump.NewDump(&dump.Props{
 				Bm:              manager,
