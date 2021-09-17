@@ -65,6 +65,7 @@ func BuildIndexMapping() (mapping.IndexMapping, error) {
 	}
 
 	bookmarkMapping.AddFieldMappingsAt("folder", rootTextFieldMapping)
+	bookmarkMapping.AddFieldMappingsAt("url", rootTextFieldMapping)
 
 	bookmarkMapping.AddFieldMappingsAt("author", keywordFieldMapping)
 	bookmarkMapping.AddFieldMappingsAt("lang", keywordFieldMapping)
