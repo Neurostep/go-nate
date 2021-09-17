@@ -199,7 +199,7 @@ func (d *Dump) DumpBookmark(ctx context.Context, req DumpRequest) error {
 
 			chromeResp, err := d.chromeL.Get(ctx, req.Href)
 			if err != nil {
-				d.l.Error(errors.Wrap(err, "got error while using chrome"))
+				d.l.Error(errors.Wrapf(err, "got error while using chrome for HREF %s", req.Href))
 			}
 
 			if chromeResp != nil && chromeResp.Body != nil {
