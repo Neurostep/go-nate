@@ -30,7 +30,7 @@ func (hi *HttpInstance) Get(ctx context.Context, url string, ua string) (*http.R
 	}
 
 	req.Header.Set("Referer", "https://www.google.com/")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Accept-Charset","utf-8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9,ru;q=0.8")
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
 	req.Header.Set("User-Agent", ua)
